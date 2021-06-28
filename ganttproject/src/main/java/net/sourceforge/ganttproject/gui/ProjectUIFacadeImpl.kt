@@ -24,15 +24,22 @@ import biz.ganttproject.app.OptionPaneBuilder
 import biz.ganttproject.app.RootLocalizer
 import biz.ganttproject.app.dialog
 import biz.ganttproject.core.option.GPOptionGroup
+import biz.ganttproject.lib.fx.VBoxBuilder
 import biz.ganttproject.storage.*
-import biz.ganttproject.storage.cloud.*
+import biz.ganttproject.storage.cloud.EmptyFlowPage
+import biz.ganttproject.storage.cloud.GPCloudUiFlowBuilder
 import com.google.common.collect.Lists
+import com.sandec.mdfx.MDFXNode
 import de.jensd.fx.glyphs.fontawesome.FontAwesomeIcon
 import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView
+import javafx.geometry.Pos
 import javafx.scene.layout.BorderPane
-import kotlinx.coroutines.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.channels.BroadcastChannel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import net.sourceforge.ganttproject.GPLogger
 import net.sourceforge.ganttproject.IGanttProject
 import net.sourceforge.ganttproject.document.Document
@@ -80,11 +87,31 @@ class ProjectUIFacadeImpl(
       }
       ProjectSaveFlow(project = project, onFinish = broadcastChannel,
         signin = this::signin,
-        error = myWorkbenchFacade::showErrorDialog,
+        error = this::onError,
         saveAs = { saveProjectAs(project) }
       ).run()
     } finally {
       isSaving = false
+    }
+  }
+
+  fun onError(ex: Exception) {
+    dialog {
+      it.addStyleSheet("/biz/ganttproject/app/dialogs.css")
+      it.addStyleClass("dialog-alert")
+      it.setHeader(
+        VBoxBuilder("header").apply {
+          addTitle(RootLocalizer.create("error.channel.itemTitle")).also { hbox ->
+            hbox.alignment = Pos.CENTER_LEFT
+            hbox.isFillHeight = true
+          }
+        }.vbox
+      )
+      it.setContent(
+        //createAlertBody(ex.message ?: ""),
+        MDFXNode(ex.message ?: "").also { it.styleClass.add("content-pane") }
+      )
+      it.removeButtonBar()
     }
   }
 
@@ -210,13 +237,14 @@ class ProjectUIFacadeImpl(
                   openProject(document, project, onFinish)
                 }
               }
-              is DocumentException -> {
-                GPLogger.log(ex)
+              is PaymentRequiredException -> {
                 onFinish?.close(ex)
               }
+              is DocumentException -> {
+                onFinish?.close(ex) ?: GPLogger.log(ex)
+              }
               else -> {
-                GPLogger.log(DocumentException("Can't open document $document", ex ))
-                onFinish?.close(ex)
+                onFinish?.close(ex) ?: GPLogger.log(DocumentException("Can't open document $document", ex ))
               }
             }
             null
@@ -388,6 +416,9 @@ class ProjectSaveFlow(
       signin {
         saveProjectTrySave(project, document)
       }
+    } catch (e: PaymentRequiredException) {
+      done(success = false)
+      error(e)
     }
   }
 

@@ -20,8 +20,6 @@ package biz.ganttproject.app
 
 import biz.ganttproject.lib.fx.VBoxBuilder
 import com.sandec.mdfx.MDFXNode
-import de.jensd.fx.glyphs.fontawesome.FontAwesomeIcon
-import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView
 import javafx.animation.FadeTransition
 import javafx.animation.ParallelTransition
 import javafx.animation.Transition
@@ -31,7 +29,6 @@ import javafx.collections.ListChangeListener
 import javafx.embed.swing.JFXPanel
 import javafx.event.ActionEvent
 import javafx.event.EventHandler
-import javafx.geometry.Pos
 import javafx.scene.Node
 import javafx.scene.Parent
 import javafx.scene.Scene
@@ -47,6 +44,8 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.javafx.JavaFx
 import kotlinx.coroutines.launch
 import net.sourceforge.ganttproject.DialogBuilder
+import net.sourceforge.ganttproject.action.CancelAction
+import net.sourceforge.ganttproject.action.GPAction
 import net.sourceforge.ganttproject.gui.UIFacade
 import net.sourceforge.ganttproject.mainWindow
 import java.util.*
@@ -78,7 +77,7 @@ fun dialogFx(contentBuilder: (DialogController) -> Unit) {
       val dialogBuildApi = DialogControllerFx(it.dialogPane)
       it.dialogPane.apply {
         styleClass.addAll("dlg")
-        stylesheets.addAll("/biz/ganttproject/app/Theme.css", "/biz/ganttproject/app/Dialog.css")
+        stylesheets.addAll("/biz/ganttproject/app/Theme.css", DIALOG_STYLESHEET)
 
         contentBuilder(dialogBuildApi)
         val window = scene.window
@@ -105,7 +104,10 @@ fun dialog(title: LocalizedString? = null,  contentBuilder: (DialogController) -
     jfxPanel.scene = Scene(dialogController.build())
     SwingUtilities.invokeLater {
       val dialogBuilder = DialogBuilder(mainWindow.get())
-      dialogBuilder.createDialog(jfxPanel, arrayOf(), title?.value ?: "", null).also {
+      dialogBuilder.createDialog(
+          jfxPanel,
+          arrayOf(CancelAction("close").also { it.putValue(GPAction.HAS_DIALOG_BUTTON, false) }),
+          title?.value ?: "", null).also {
         swingDialogController.set(it)
         dialogController.setDialogFrame(it)
       }
@@ -135,7 +137,7 @@ class DialogControllerSwing() : DialogController {
   private lateinit var dialogFrame: UIFacade.Dialog
   private val paneBuilder = VBoxBuilder().also {
     it.vbox.styleClass.add("dlg")
-    it.vbox.stylesheets.addAll("/biz/ganttproject/app/Theme.css", "/biz/ganttproject/app/Dialog.css")
+    it.vbox.stylesheets.addAll("/biz/ganttproject/app/Theme.css", DIALOG_STYLESHEET)
   }
 
   private val contentStack = StackPane()
@@ -408,21 +410,13 @@ fun createOverlayPane(underlayPane: Node, stackPane: StackPane, overlayBuilder: 
 fun createAlertPane(underlayPane: Node, stackPane: StackPane, title: LocalizedString, body: Node) {
   createOverlayPane(underlayPane, stackPane) { pane ->
     pane.styleClass.add("alert-glasspane")
-    val vboxBuilder = VBoxBuilder("alert-box")
-    vboxBuilder.addTitle(title).also { hbox ->
-      hbox.alignment = Pos.CENTER_LEFT
-      hbox.isFillHeight = true
-      hbox.children.add(Region().also { node -> HBox.setHgrow(node, Priority.ALWAYS) })
-      val btnClose = Button(null, FontAwesomeIconView(FontAwesomeIcon.TIMES)).also { btn -> btn.styleClass.add("alert-dismiss") }
-      hbox.children.add(btnClose)
-      btnClose.addEventHandler(ActionEvent.ACTION) {
+    buildAlertPane(title, body, true).let {
+      pane.center = it.contents
+      it.btnClose?.addEventHandler(ActionEvent.ACTION) {
         stackPane.children.remove(pane)
         underlayPane.effect = null
       }
-
     }
-    vboxBuilder.add(body, Pos.CENTER, Priority.ALWAYS)
-    pane.center = vboxBuilder.vbox
     pane.opacity = 0.0
   }
 }

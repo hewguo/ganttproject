@@ -73,18 +73,23 @@ fun startUiApp(args: GanttProject.Args, configure: (GanttProject) -> Unit = {}) 
   try {
     val toolkit: Toolkit = Toolkit.getDefaultToolkit()
     val awtAppClassNameField: Field = toolkit.javaClass.getDeclaredField("awtAppClassName")
-    awtAppClassNameField.setAccessible(true)
+    awtAppClassNameField.isAccessible = true
     awtAppClassNameField.set(toolkit, RootLocalizer.formatText("appliTitle"))
   } catch (e: NoSuchFieldException) {
-    APP_LOGGER.error("Can't set awtAppClassName (needed on Linux to show app name in the top panel)", exception = e)
+    APP_LOGGER.error("Can't set awtAppClassName (needed on Linux to show app name in the top panel)")
   } catch (e: IllegalAccessException) {
-    APP_LOGGER.error("Can't set awtAppClassName (needed on Linux to show app name in the top panel)", exception = e)
+    APP_LOGGER.error("Can't set awtAppClassName (needed on Linux to show app name in the top panel)")
   }
   val autosaveCleanup = DocumentCreator.createAutosaveCleanup()
 
   val splashCloser = showAsync()
 
   Platform.setImplicitExit(false)
+  Platform.runLater {
+    Thread.currentThread().uncaughtExceptionHandler = UncaughtExceptionHandler {
+        _, e -> GPLogger.log(e)
+    }
+  }
   SwingUtilities.invokeLater {
     try {
       val ganttFrame = GanttProject(false)
@@ -105,6 +110,9 @@ fun startUiApp(args: GanttProject.Args, configure: (GanttProject) -> Unit = {}) 
     } finally {
       Thread.currentThread().uncaughtExceptionHandler = UncaughtExceptionHandler {
         _, e -> GPLogger.log(e)
+      }
+      Thread.setDefaultUncaughtExceptionHandler { _, e ->
+        GPLogger.log(e)
       }
     }
   }
